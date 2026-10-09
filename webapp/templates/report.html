@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Report a pothole · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--report">
+  <div class="intro">
+    <h1>Report a pothole</h1>
+    <p>Take a photo of the damage. We check it, pin its location and send it to the road team for that street.</p>
+    <form class="track-lookup" action="{{ url_for('track_lookup') }}" method="get">
+      <label for="track-code">Already reported one? Check its status</label>
+      <div class="track-lookup-row">
+        <input id="track-code" name="code" placeholder="PTH-7K2M9Q" autocomplete="off" autocapitalize="characters">
+        <button class="btn btn--small" type="submit">Check status</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not model_ready %}
+    <p class="banner banner--warn">The detection model isn't installed on this server yet, so photos can't be checked.
+      Copy <code>pothole_detector.pt</code> into <code>webapp/models/</code> and restart.</p>
+  {% endif %}
+
+  <form id="report-form" class="report-grid" novalidate>
+    <fieldset class="step">
+      <legend><span class="step-no">1</span>Photo</legend>
+      <label class="dropzone" for="photo" id="dropzone">
+        <input type="file" id="photo" name="photo" accept="image/*" capture="environment" required>
+        <img id="preview" alt="" hidden>
+        <span class="dz-text" id="dz-text">
+          <strong>Take or choose a photo</strong>
+          <span>Stand a few steps back so the whole pothole is in the frame.</span>
+        </span>
+      </label>
+    </fieldset>
+
+    <fieldset class="step">
+      <legend><span class="step-no">2</span>Location</legend>
+      <p class="loc-status" id="loc-status">Finding your location…</p>
+      <div id="pick-map" class="pick-map" role="application" aria-label="Map: drag the pin onto the pothole"></div>
+      <p class="hint">Drag the pin or tap the map if it isn't exactly on the pothole.</p>
+      <input type="hidden" name="lat" id="lat">
+      <input type="hidden" name="lng" id="lng">
+      <input type="hidden" name="accuracy" id="accuracy">
+      <input type="hidden" name="location_source" id="location_source" value="gps">
+    </fieldset>
+
+    <fieldset class="step">
+      <legend><span class="step-no">3</span>Updates <span class="optional">optional</span></legend>
+      <p class="hint">Leave an email or mobile number and we'll message you when repair starts and when it's fixed.</p>
+      <label class="field">Name<input type="text" name="name" autocomplete="name" maxlength="80"></label>
+      <label class="field">Email<input type="email" name="email" autocomplete="email" inputmode="email"></label>
+      <label class="field">Mobile number<input type="tel" name="phone" autocomplete="tel" inputmode="tel" placeholder="98765 43210"></label>
+    </fieldset>
+
+    <div class="submit-row">
+      <button type="submit" class="btn btn--primary" id="submit-btn">Send report</button>
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+    </div>
+  </form>
+
+  <section class="result" id="result" hidden aria-live="polite">
+    <div class="result-photo"><img id="result-img" alt="Your photo with the detected damage outlined"></div>
+    <div class="result-body">
+      <p class="sev-badge" id="result-sev"></p>
+      <h2 id="result-title"></h2>
+      <p class="result-address" id="result-address"></p>
+      <ul class="det-list" id="result-dets"></ul>
+      <div class="code-box">
+        <span>Your report code</span>
+        <strong id="result-code"></strong>
+      </div>
+      <div class="btn-row">
+        <a class="btn btn--primary" id="result-track">Track this report</a>
+        <button class="btn" type="button" id="report-another">Report another</button>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/report.js') }}"></script>{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Authority sign in · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <h1>Authority sign in</h1>
+  <p class="muted">For municipal staff who manage road repair reports.</p>
+  <form method="post" class="stack">
+    <label class="field">Email<input type="email" name="email" autocomplete="username" required autofocus></label>
+    <label class="field">Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="btn btn--primary" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

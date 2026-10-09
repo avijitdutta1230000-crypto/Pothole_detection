@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ report.code }} · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--track" id="track" data-code="{{ report.code }}" data-status="{{ report.status }}">
+  <div class="intro">
+    <p class="code-line">Report {{ report.code }}</p>
+    <h1>{{ report.primary_label }} at {{ report.address }}</h1>
+    <p class="muted">
+      <span class="sev sev--{{ report.severity|lower }}">{{ report.severity|title }} severity</span>
+      {% if report.report_count > 1 %}<span>Reported by {{ report.report_count }} people</span>{% endif %}
+      <span>Reported <time data-iso="{{ report.created_at }}">{{ report.created_at }}</time></span>
+    </p>
+  </div>
+
+  {% set st = report.status %}
+  {% if st == 'REJECTED' %}
+    <div class="banner banner--muted">
+      <strong>Closed without repair.</strong>
+      {% if report.resolution_note %} {{ report.resolution_note }}{% endif %}
+    </div>
+  {% else %}
+    <ol class="timeline" id="timeline">
+      <li class="done"><span>Received</span><small>Sent to {{ report.authority.name if report.authority else 'the road team' }}</small></li>
+      <li class="{{ 'done' if st in ('IN_PROGRESS','RESOLVED') else '' }} {{ 'current' if st == 'OPEN' else '' }}">
+        <span>Repair started</span><small>{{ 'Crew assigned' if st in ('IN_PROGRESS','RESOLVED') else 'Waiting for the road team' }}</small></li>
+      <li class="{{ 'done' if st == 'RESOLVED' else '' }} {{ 'current' if st == 'IN_PROGRESS' else '' }}">
+        <span>Fixed</span><small>{% if report.resolved_at %}<time data-iso="{{ report.resolved_at }}">{{ report.resolved_at }}</time>{% else %}Not yet{% endif %}</small></li>
+    </ol>
+    {% if st == 'RESOLVED' and report.resolution_note %}
+      <p class="banner banner--ok"><strong>Note from the road team:</strong> {{ report.resolution_note }}</p>
+    {% endif %}
+  {% endif %}
+
+  <div class="photo-pair">
+    <figure><img src="{{ report.annotated_url }}" alt="Reported photo with detected damage outlined"><figcaption>Reported</figcaption></figure>
+    {% if report.resolution_image_url %}
+      <figure><img src="{{ report.resolution_image_url }}" alt="Photo after repair"><figcaption>After repair</figcaption></figure>
+    {% endif %}
+  </div>
+
+  {% if st in ('OPEN', 'IN_PROGRESS') %}
+    <div class="notify-row">
+      <button class="btn" id="notify-btn" type="button">Notify me in this browser</button>
+      <p class="hint" id="notify-hint">Keep this page open and we'll pop up a notification when the status changes.</p>
+    </div>
+  {% endif %}
+
+  <h2 class="section-title">History</h2>
+  <ul class="events">
+    {% for e in report.events %}
+      <li><time data-iso="{{ e.created_at }}">{{ e.created_at }}</time><span>{{ e.status|replace('_', ' ')|capitalize }}{% if e.note %}: {{ e.note }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/track.js') }}"></script>{% endblock %}

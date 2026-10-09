@@ -1,0 +1,6 @@
+flask>=3.0
+python-dotenv>=1.0
+requests>=2.31
+pillow>=10.1
+ultralytics>=8.4.0      # YOLO26 support; pulls in torch (CPU is fine for one photo at a time)
+pyopenssl>=24.0         # only needed for `python app.py --https` (phones share GPS only with https pages)

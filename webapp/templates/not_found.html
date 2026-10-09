@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not found · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <h1>That page doesn't exist</h1>
+  <p>If you followed a report link, check the code. It looks like <strong>PTH-7K2M9Q</strong>.</p>
+  <p><a class="btn btn--primary" href="{{ url_for('report_page') }}">Report a pothole</a></p>
+</div>
+{% endblock %}

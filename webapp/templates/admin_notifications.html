@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Notifications · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--wide">
+  <div class="intro">
+    <h1>Notifications</h1>
+    <p>Every email and SMS the system tried to send, newest first.
+      {% if not (email_ready and sms_ready) %}
+        Rows marked <em>not set up</em> were recorded but not sent because
+        {% if not email_ready and not sms_ready %}email and SMS aren't{% elif not email_ready %}email isn't{% else %}SMS isn't{% endif %}
+        configured in <code>.env</code>.
+      {% endif %}
+    </p>
+  </div>
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Report</th><th>To</th><th>Channel</th><th>Recipient</th><th>Message</th><th>Result</th></tr></thead>
+        <tbody>
+          {% for n in rows %}
+            <tr>
+              <td><time data-iso="{{ n.created_at }}">{{ n.created_at }}</time></td>
+              <td>{% if n.code %}<a href="{{ url_for('admin_dashboard') }}?report={{ n.code }}">{{ n.code }}</a>{% else %}Test{% endif %}</td>
+              <td>{{ n.audience|capitalize }}</td>
+              <td>{{ 'Email' if n.channel == 'email' else 'SMS' }}</td>
+              <td>{{ n.recipient }}</td>
+              <td class="msg-cell"><details><summary>{{ n.subject or (n.body[:60] ~ ('…' if n.body|length > 60 else '')) }}</summary><pre>{{ n.body }}</pre></details></td>
+              <td>
+                {% if n.status == 'sent' %}<span class="pill pill--ok">Sent</span>
+                {% elif n.status == 'failed' %}<span class="pill pill--bad" title="{{ n.error }}">Failed</span><small class="err">{{ n.error }}</small>
+                {% else %}<span class="pill">Not set up</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">Nothing yet. Messages appear here when a pothole is reported or a repair status changes.
+      Use <a href="{{ url_for('admin_authorities') }}">Send test</a> on a contact to check your email and SMS settings.</p>
+  {% endif %}
+</div>
+{% endblock %}

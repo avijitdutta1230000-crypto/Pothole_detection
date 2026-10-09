@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Drive mode · PotholeWatch{% endblock %}
+{% block body_class %}is-drive{% endblock %}
+{% block content %}
+<div class="drive" data-radius="{{ alert_radius }}">
+  <div id="drive-map" class="drive-map" aria-label="Map of reported potholes near you"></div>
+
+  <section class="alert alert--idle" id="alert" aria-live="assertive">
+    <svg class="sign" viewBox="0 0 100 90" aria-hidden="true">
+      <path d="M50 6 95 84H5z" fill="#fff" stroke="currentColor" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M24 70h52" stroke="#22272b" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="50" cy="62" rx="15" ry="5.5" fill="#22272b"/>
+      <path d="M33 70q3-6 6-1M61 69q3-5 6 1" stroke="#22272b" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="alert-body">
+      <p class="alert-distance" id="alert-distance">{{ (alert_radius/1000)|round(1)|string|replace('.0','') }} km</p>
+      <p class="alert-text" id="alert-text">Start drive mode to be warned about reported potholes within {{ (alert_radius/1000)|round(1)|string|replace('.0','') }} km.</p>
+      <p class="alert-more" id="alert-more"></p>
+    </div>
+  </section>
+
+  <div class="drive-controls">
+    <button class="btn btn--primary" id="start-btn" type="button">Start drive mode</button>
+    <label class="check"><input type="checkbox" id="voice" checked> Voice warnings</label>
+    <label class="check"><input type="checkbox" id="follow" checked> Follow me</label>
+    <label class="check"><input type="checkbox" id="sim"> Simulate: tap the map to move</label>
+    <p class="gps-status" id="gps-status" role="status">GPS off</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/drive.js') }}"></script>{% endblock %}

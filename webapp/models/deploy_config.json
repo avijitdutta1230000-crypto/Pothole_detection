@@ -1,0 +1,9 @@
+{
+  "det_conf": 0.3,
+  "verifier_threshold": 0.4,
+  "imgsz": 736,
+  "weights": {
+    "det": "yolo26s.pt",
+    "cls": "yolo26s-cls.pt"
+  }
+}

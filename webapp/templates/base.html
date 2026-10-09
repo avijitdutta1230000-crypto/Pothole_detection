@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#22272b">
+  <title>{% block title %}PotholeWatch{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 8 96 90H4z' fill='%23fff' stroke='%23b8321f' stroke-width='10' stroke-linejoin='round'/><ellipse cx='50' cy='68' rx='22' ry='8' fill='%2322272b'/></svg>">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('admin_dashboard') if admin_name else url_for('report_page') }}">PotholeWatch</a>
+    <nav class="nav" aria-label="Main">
+      {% if admin_name %}
+        <a href="{{ url_for('admin_dashboard') }}" {% if request.endpoint == 'admin_dashboard' %}aria-current="page"{% endif %}>Reports</a>
+        <a href="{{ url_for('admin_authorities') }}" {% if request.endpoint == 'admin_authorities' %}aria-current="page"{% endif %}>Contacts</a>
+        <a href="{{ url_for('admin_notifications') }}" {% if request.endpoint == 'admin_notifications' %}aria-current="page"{% endif %}>Notifications</a>
+        <a href="{{ url_for('drive_page') }}" {% if request.endpoint == 'drive_page' %}aria-current="page"{% endif %}>Drive mode</a>
+        <a href="{{ url_for('admin_account') }}" {% if request.endpoint == 'admin_account' %}aria-current="page"{% endif %}>Account</a>
+        <a href="{{ url_for('admin_logout') }}">Sign out</a>
+      {% else %}
+        <a href="{{ url_for('report_page') }}" {% if request.endpoint == 'report_page' %}aria-current="page"{% endif %}>Report</a>
+        <a href="{{ url_for('drive_page') }}" {% if request.endpoint == 'drive_page' %}aria-current="page"{% endif %}>Drive mode</a>
+        <a href="{{ url_for('admin_login') }}" {% if request.endpoint == 'admin_login' %}aria-current="page"{% endif %}>Authority sign in</a>
+      {% endif %}
+    </nav>
+  </header>
+  <div class="lane" aria-hidden="true"></div>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="flash" role="status">
+        {% for m in messages %}<p>{{ m }}</p>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main id="main">{% block content %}{% endblock %}</main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

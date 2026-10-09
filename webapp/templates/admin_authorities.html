@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Contacts · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--wide">
+  <div class="intro">
+    <h1>Authority contacts</h1>
+    <p>New pothole reports are sent by email and SMS to the contact whose zone contains the pothole.
+      A contact without a zone receives reports from anywhere that no zone covers.</p>
+  </div>
+
+  <div class="two-col">
+    <form method="post" class="panel stack" id="authority-form">
+      <h2>Add a contact</h2>
+      <label class="field">Office or officer name<input name="name" required placeholder="Assistant Engineer, Ward 12"></label>
+      <label class="field"><span class="field-label">Department <span class="optional">optional</span></span><input name="department" placeholder="Vellore Corporation, Roads"></label>
+      <label class="field">Email<input type="email" name="email" placeholder="roads.ward12@example.gov.in"></label>
+      <label class="field">Mobile number<input type="tel" name="phone" placeholder="98765 43210"></label>
+      <div class="check-row">
+        <label class="check"><input type="checkbox" name="notify_email" checked> Send email</label>
+        <label class="check"><input type="checkbox" name="notify_sms" checked> Send SMS</label>
+      </div>
+
+      <h3>Zone <span class="optional">optional</span></h3>
+      <p class="hint">Tap the map to set the centre of the area this contact covers.</p>
+      <div id="zone-map" class="zone-map"></div>
+      <div class="field-row">
+        <label class="field">Zone name<input name="zone_name" placeholder="Katpadi"></label>
+        <label class="field">Radius (km)<input name="zone_radius_km" id="zone_radius_km" type="number" step="0.1" min="0.1" placeholder="3"></label>
+      </div>
+      <input type="hidden" name="zone_lat" id="zone_lat">
+      <input type="hidden" name="zone_lng" id="zone_lng">
+      <button class="btn btn--primary" type="submit">Add contact</button>
+    </form>
+
+    <div class="panel">
+      <h2>Contacts</h2>
+      <p class="channel-state">
+        Email {{ 'is set up' if email_ready else "isn't set up" }}.
+        SMS {{ 'is set up' if sms_ready else "isn't set up" }}.
+        {% if not (email_ready and sms_ready) %}Messages on a channel that isn't set up are recorded but not sent.{% endif %}
+      </p>
+      {% if authorities %}
+        <ul class="contact-list">
+          {% for a in authorities %}
+            <li class="{{ '' if a.is_active else 'is-paused' }}">
+              <div>
+                <strong>{{ a.name }}</strong>{% if a.department %}<span class="muted"> {{ a.department }}</span>{% endif %}
+                <p>{{ a.email or 'No email' }}{% if a.email and not a.notify_email %} (email off){% endif %}</p>
+                <p>{{ a.phone or 'No phone' }}{% if a.phone and not a.notify_sms %} (SMS off){% endif %}</p>
+                <p class="muted">
+                  {% if a.zone_lat is not none %}{{ a.zone_name or 'Zone' }}: {{ a.zone_radius_km }} km around {{ '%.4f'|format(a.zone_lat) }}, {{ '%.4f'|format(a.zone_lng) }}
+                  {% else %}Whole city{% endif %}
+                  {% if a.open_count %} | {{ a.open_count }} open report{{ 's' if a.open_count != 1 }}{% endif %}
+                  {% if not a.is_active %} | Paused{% endif %}
+                </p>
+              </div>
+              <div class="contact-actions">
+                <form method="post" action="{{ url_for('admin_authority_test', aid=a.id) }}"><button class="btn btn--small" type="submit">Send test</button></form>
+                <form method="post" action="{{ url_for('admin_authority_toggle', aid=a.id) }}"><button class="btn btn--small" type="submit">{{ 'Pause' if a.is_active else 'Resume' }}</button></form>
+                <form method="post" action="{{ url_for('admin_authority_delete', aid=a.id) }}" onsubmit="return confirm('Remove this contact?')"><button class="btn btn--small btn--danger" type="submit">Remove</button></form>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">Add the first contact with the form. Without one, new reports are stored but nobody is told.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script id="zone-data" type="application/json">{{ zones | tojson }}</script>
+<script src="{{ url_for('static', filename='js/authorities.js') }}"></script>
+{% endblock %}

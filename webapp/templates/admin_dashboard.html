@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Reports · PotholeWatch{% endblock %}
+{% block body_class %}is-dash{% endblock %}
+{% block content %}
+{% if not has_authority or not (email_ready or sms_ready) %}
+  <div class="setup">
+    {% if not has_authority %}
+      <p>No authority contacts yet, so new reports aren't sent to anyone. <a href="{{ url_for('admin_authorities') }}">Add a contact</a></p>
+    {% endif %}
+    {% if not (email_ready or sms_ready) %}
+      <p>Email and SMS aren't set up, so messages are only recorded on the <a href="{{ url_for('admin_notifications') }}">Notifications</a> page. Add SMTP or Twilio settings to <code>.env</code>.</p>
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="dash">
+  <aside class="dash-list">
+    <div class="filters">
+      <div class="seg" role="group" aria-label="Status">
+        <button type="button" data-status="ACTIVE" aria-pressed="true">To do <b data-count="ACTIVE"></b></button>
+        <button type="button" data-status="IN_PROGRESS" aria-pressed="false">In progress <b data-count="IN_PROGRESS"></b></button>
+        <button type="button" data-status="RESOLVED" aria-pressed="false">Fixed <b data-count="RESOLVED"></b></button>
+        <button type="button" data-status="" aria-pressed="false">All</button>
+      </div>
+      <div class="filter-row">
+        <label class="sr-only" for="f-sev">Severity</label>
+        <select id="f-sev">
+          <option value="">Any severity</option>
+          <option value="HIGH">High</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="LOW">Low</option>
+        </select>
+        <label class="sr-only" for="f-q">Search</label>
+        <input id="f-q" type="search" placeholder="Code or street">
+      </div>
+    </div>
+    <ul class="report-list" id="report-list" aria-label="Reports"></ul>
+  </aside>
+
+  <div class="dash-map" id="dash-map" aria-label="Map of reports"></div>
+
+  <section class="detail" id="detail" hidden aria-label="Report details">
+    <button class="detail-close" id="detail-close" type="button" aria-label="Close details">×</button>
+    <div id="detail-body"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>{% endblock %}

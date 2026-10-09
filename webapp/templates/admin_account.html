@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Account · PotholeWatch{% endblock %}
+{% block content %}
+<div class="page page--wide">
+  <div class="intro">
+    <h1>Staff accounts</h1>
+    <p>Everyone listed here can sign in, update report status and manage contacts.</p>
+  </div>
+  <div class="two-col">
+    <div class="stack">
+      <form method="post" class="panel stack">
+        <h2>Change your password</h2>
+        <input type="hidden" name="action" value="password">
+        <label class="field">Current password<input type="password" name="current" autocomplete="current-password" required></label>
+        <label class="field">New password<input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn btn--primary" type="submit">Change password</button>
+      </form>
+      <form method="post" class="panel stack">
+        <h2>Add a staff account</h2>
+        <input type="hidden" name="action" value="add">
+        <label class="field"><span class="field-label">Name <span class="optional">optional</span></span><input name="name" autocomplete="off"></label>
+        <label class="field">Email<input type="email" name="email" autocomplete="off" required></label>
+        <label class="field">Password<input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn" type="submit">Add account</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Accounts</h2>
+      <ul class="contact-list">
+        {% for u in users %}
+          <li><div><strong>{{ u.name or u.email }}</strong><p class="muted">{{ u.email }}</p></div></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
