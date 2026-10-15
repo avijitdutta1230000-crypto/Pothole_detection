@@ -151,7 +151,11 @@
     const where = `https://www.google.com/maps?q=${r.lat},${r.lng}`;
     const locNote = r.location_source === "photo" ? "from photo"
       : r.location_source === "manual" ? "placed on map"
+      : r.location_source === "device" ? "pothole box GPS"
       : r.accuracy_m ? `GPS ±${Math.round(r.accuracy_m)} m` : "GPS";
+    const foundBy = r.source === "device"
+      ? `Pothole box ${PW.esc(r.device_id || "")}${r.jolt_g ? `, jolt ${Number(r.jolt_g).toFixed(2)} g` : ""}${r.speed_kmh != null ? ` at ${Math.round(r.speed_kmh)} km/h` : ""}`
+      : "Citizen report";
     return `
       <p class="sev-badge ${r.severity.toLowerCase()}">${PW.esc(sevWord(r.severity))} severity, score ${Number(r.severity_score).toFixed(2)}</p>
       <h2>${PW.esc(r.primary_label)} at ${PW.esc(r.address)}</h2>
@@ -159,6 +163,7 @@
         <dt>Code</dt><dd>${PW.esc(r.code)}</dd>
         <dt>Status</dt><dd>${PW.esc(PW.statusLabel[r.status])}</dd>
         <dt>Reported</dt><dd>${PW.esc(PW.fmtTime(r.created_at))}</dd>
+        <dt>Found by</dt><dd>${foundBy}</dd>
         <dt>Reports</dt><dd>${r.report_count} (${r.subscriber_count} want updates)</dd>
         <dt>Assigned to</dt><dd>${PW.esc(r.authority ? r.authority.name : "No contact covers this area")}</dd>
         <dt>Location</dt><dd><a href="${where}" target="_blank" rel="noopener">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</a>

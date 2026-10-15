@@ -42,3 +42,30 @@ def severity(cls, area_ratio, conf):
 
 
 SEVERITY_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+
+# ----------------------------------------------------------------------------- pothole box (seeing + feeling)
+# The box also measures how hard the vehicle was jolted. The jolt limit already grows with speed on the box,
+# so a jolt exactly at the limit scores 0.5 and a jolt twice the limit (or more) scores 1.
+JOLT_WEIGHT = 0.30      # share of the final score that comes from the jolt when the camera also saw the pothole
+
+
+def label_for(score):
+    return "LOW" if score < LOW_MAX else ("MEDIUM" if score < MEDIUM_MAX else "HIGH")
+
+
+def jolt_score(jolt_g, limit_g):
+    if not jolt_g or not limit_g or limit_g <= 0:
+        return None
+    return round(min(1.0, max(0.0, float(jolt_g) / (2.0 * float(limit_g)))), 3)
+
+
+def fuse(photo_score, jscore):
+    """Camera only -> photo score. Jolt only -> jolt score. Both -> 70% photo + 30% jolt."""
+    if jscore is None:
+        score = photo_score
+    elif photo_score is None:
+        score = jscore
+    else:
+        score = (1 - JOLT_WEIGHT) * photo_score + JOLT_WEIGHT * jscore
+    score = round(min(1.0, score), 3)
+    return score, label_for(score)

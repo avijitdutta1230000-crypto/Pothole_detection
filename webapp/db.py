@@ -93,6 +93,25 @@ CREATE TABLE IF NOT EXISTS notifications (
 """
 
 
+# Columns added after the first release. init_db adds any that an older potholes.db is missing,
+# so existing reports and contacts are kept.
+NEW_REPORT_COLUMNS = {
+    "source": "TEXT",            # citizen | device
+    "device_id": "TEXT",         # which pothole box found it
+    "jolt_g": "REAL",            # strongest jolt the box felt at this spot
+    "speed_kmh": "REAL",         # vehicle speed at that moment
+    "recheck_count": "INTEGER NOT NULL DEFAULT 0",  # passes that still found it after it was marked fixed
+    "recheck_last": "TEXT",
+}
+
+
+def migrate(con):
+    have = {r["name"] for r in con.execute("PRAGMA table_info(reports)")}
+    for name, kind in NEW_REPORT_COLUMNS.items():
+        if name not in have:
+            con.execute(f"ALTER TABLE reports ADD COLUMN {name} {kind}")
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -121,6 +140,7 @@ def init_db(app):
     con = connect(app.config["DATABASE"])
     con.execute("PRAGMA journal_mode = WAL")
     con.executescript(SCHEMA)
+    migrate(con)
     if not con.execute("SELECT 1 FROM admin_users LIMIT 1").fetchone():
         con.execute(
             "INSERT INTO admin_users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)",

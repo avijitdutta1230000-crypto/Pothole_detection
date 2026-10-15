@@ -1,19 +1,21 @@
 import json
 import secrets
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session,
                    url_for)
+from PIL import Image
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import db as dbm
 from config import Config
-from detector import RoadDamageDetector, prepare_photo
+from detector import RoadDamageDetector, caption_bar, prepare_photo
 from geo import ReverseGeocoder, bbox, bearing_deg, exif_gps, haversine_m, valid_latlng
-from notifier import (Notifier, msg_citizen_received, msg_citizen_status, msg_new_report, normalize_phone,
-                      valid_email)
-from severity import LABELS, SEVERITY_RANK
+from notifier import (Notifier, msg_citizen_received, msg_citizen_reopened, msg_citizen_status, msg_new_report,
+                      msg_reopened, normalize_phone, valid_email)
+from severity import LABELS, SEVERITY_RANK, canonical_class, fuse, jolt_score, severity
 
 STATUSES = ("OPEN", "IN_PROGRESS", "RESOLVED", "REJECTED")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -229,7 +231,7 @@ def create_app(config=Config, detector=None, notifier=None, geocoder=None):
             cur = con.execute(
                 "INSERT INTO reports (code, lat, lng, accuracy_m, location_source, address, image_path, annotated_path,"
                 " primary_class, confidence, severity_score, severity, detections_json, status, authority_id,"
-                " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'OPEN',?,?,?)",
+                " created_at, updated_at, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'OPEN',?,?,?,'citizen')",
                 (code, lat, lng, accuracy, source, address, img_name, ann_name, top["cls"], top["confidence"],
                  top["severity_score"], top["severity"], json.dumps(dets), auth["id"] if auth else None, now, now))
             report_id, status_word = cur.lastrowid, "created"
@@ -290,6 +292,197 @@ def create_app(config=Config, detector=None, notifier=None, geocoder=None):
                             "status": r["status"], "address": r["address"], "report_count": r["report_count"]})
         out.sort(key=lambda h: h["distance_m"])
         return jsonify({"ok": True, "radius_m": radius, "hazards": out})
+
+    # ------------------------------------------------------------------ API (Raspberry Pi pothole box)
+    def device_auth():
+        """None when the request carries the right device token, otherwise the error response."""
+        token = app.config.get("DEVICE_TOKEN") or ""
+        if not token:
+            return err("The device API is switched off. Set DEVICE_TOKEN in webapp/.env and restart the server.", 403)
+        if not secrets.compare_digest(token, request.headers.get("X-Device-Token", "")):
+            return err("Wrong or missing device token. Use the same DEVICE_TOKEN as in webapp/.env.", 401)
+        return None
+
+    def seconds_since(iso):
+        try:
+            t = datetime.fromisoformat(iso)
+            return (datetime.now(timezone.utc) - (t if t.tzinfo else t.replace(tzinfo=timezone.utc))).total_seconds()
+        except (TypeError, ValueError):
+            return None
+
+    def nearby_reports(con, lat, lng, radius, statuses):
+        lo_lat, hi_lat, lo_lng, hi_lng = bbox(lat, lng, radius)
+        marks = ",".join("?" * len(statuses))
+        rows = []
+        for r in con.execute(f"SELECT * FROM reports WHERE status IN ({marks}) AND lat BETWEEN ? AND ? "
+                             "AND lng BETWEEN ? AND ?", (*statuses, lo_lat, hi_lat, lo_lng, hi_lng)):
+            d = haversine_m(lat, lng, r["lat"], r["lng"])
+            if d <= radius:
+                rows.append((d, r))
+        return [r for _, r in sorted(rows, key=lambda x: x[0])]
+
+    @app.get("/api/device/ping")
+    def device_ping():
+        bad = device_auth()
+        if bad:
+            return bad
+        return jsonify({"ok": True, "server_time": dbm.now_iso(), "alert_radius_m": app.config["ALERT_RADIUS_M"],
+                        "duplicate_radius_m": app.config["DUPLICATE_RADIUS_M"]})
+
+    @app.post("/api/device/report")
+    def device_report():
+        """A pothole box saw a pothole (camera), felt one (jolt), or both.
+
+        Header X-Device-Token. Form: device_id, lat, lng, accuracy, speed_kmh, heading, kind (camera|jolt|both),
+        detections (JSON list of {cls, confidence, verifier, box: [x0, y0, x1, y1]} in photo pixels), jolt_g,
+        jolt_limit_g. File: photo (the camera frame). The box has already run the detector and the verifier,
+        so the server does not run the model again.
+        """
+        bad = device_auth()
+        if bad:
+            return bad
+        f = request.form
+        photo = request.files.get("photo")
+        if not photo or not photo.filename:
+            return err("Send the camera frame as 'photo'.")
+        lat, lng = to_float(f.get("lat")), to_float(f.get("lng"))
+        if not valid_latlng(lat, lng):
+            return err("lat and lng are required (the box has no GPS position yet).")
+        kind = f.get("kind") if f.get("kind") in ("camera", "jolt", "both") else "camera"
+        device_id = (f.get("device_id") or "box").strip()[:40]
+        speed = to_float(f.get("speed_kmh"))
+        jolt_g, jolt_limit = to_float(f.get("jolt_g")), to_float(f.get("jolt_limit_g"))
+        js = jolt_score(jolt_g, jolt_limit)
+        try:
+            raw = json.loads(f.get("detections") or "[]")
+            if not isinstance(raw, list):
+                raise ValueError
+        except ValueError:
+            return err("detections must be a JSON list.")
+        if kind == "jolt" and js is None:
+            return err("A jolt report needs jolt_g and jolt_limit_g.")
+
+        con = dbm.get_db()
+        code = new_code(con)
+        img_name, ann_name = f"{code}.jpg", f"{code}_detected.jpg"
+        img_path, ann_path = upload_dir / img_name, upload_dir / ann_name
+        try:
+            original = prepare_photo(photo.stream, img_path)
+        except Exception:
+            return err("The photo could not be opened.")
+        im = Image.open(img_path).convert("RGB")
+        W, H = im.size
+        scale = W / max(1, original.width)  # boxes are in the pixels of the photo the box sent
+
+        dets = []
+        for d in raw[:20]:
+            try:
+                box = [float(v) * scale for v in d["box"][:4]]
+                conf = float(d.get("confidence") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+            name = canonical_class(d.get("cls") or "pothole")
+            area = max(0.0, (box[2] - box[0]) * (box[3] - box[1])) / (W * H)
+            photo_score, _ = severity(name, area, conf)
+            score, label = fuse(photo_score, js)
+            ver = d.get("verifier")
+            dets.append({"cls": name, "label": LABELS.get(name, name.replace("_", " ").title()),
+                         "confidence": round(conf, 3), "verifier": None if ver is None else round(float(ver), 3),
+                         "box": [round(v, 1) for v in box], "area_ratio": round(area, 4),
+                         "photo_score": photo_score, "severity_score": score, "severity": label})
+        dets.sort(key=lambda d: d["severity_score"], reverse=True)
+        if dets:
+            top_cls, top_conf = dets[0]["cls"], dets[0]["confidence"]
+            score, label = dets[0]["severity_score"], dets[0]["severity"]
+        elif js is not None:
+            top_cls, top_conf = "pothole", None
+            score, label = fuse(None, js)
+        else:
+            img_path.unlink(missing_ok=True)
+            return err("A camera report needs at least one detection.")
+
+        annotated = RoadDamageDetector.draw(im, dets)
+        if jolt_g:
+            speed_txt = f" at {speed:.0f} km/h" if speed is not None else ""
+            annotated = caption_bar(annotated, f"Pothole box {device_id}: jolt {jolt_g:.2f} g{speed_txt}")
+        annotated.save(ann_path, "JPEG", quality=88)
+
+        how = {"camera": "seen on camera", "jolt": "felt as a jolt", "both": "seen on camera and felt as a jolt"}[kind]
+        actor = f"pothole box {device_id}"
+        now = dbm.now_iso()
+        radius = app.config["DUPLICATE_RADIUS_M"]
+        active = nearby_reports(con, lat, lng, radius, ("OPEN", "IN_PROGRESS"))
+        fixed = [r for r in nearby_reports(con, lat, lng, radius, ("RESOLVED",))
+                 if (seconds_since(r["resolved_at"]) or 0) <= app.config["REPAIR_CHECK_DAYS"] * 86400]
+        escalated, passes, need, still_name = False, None, app.config["REOPEN_AFTER_PASSES"], None
+
+        if active:  # already on the map: count it, and raise the severity if this pass found it worse
+            dup = active[0]
+            escalated = SEVERITY_RANK[label] > SEVERITY_RANK[dup["severity"]]
+            con.execute("UPDATE reports SET report_count = report_count + 1, updated_at = ?, "
+                        "jolt_g = CASE WHEN ? IS NULL THEN jolt_g ELSE MAX(COALESCE(jolt_g, 0), ?) END WHERE id = ?",
+                        (now, jolt_g, jolt_g, dup["id"]))
+            if escalated:
+                con.execute("UPDATE reports SET severity = ?, severity_score = ?, primary_class = ? WHERE id = ?",
+                            (label, score, top_cls, dup["id"]))
+            add_event(con, dup["id"], dup["status"], f"Found again by {actor} ({how})", actor)
+            report_id, status_word = dup["id"], "merged"
+            img_path.unlink(missing_ok=True)
+            ann_path.unlink(missing_ok=True)
+        elif fixed:  # marked fixed, but a passing vehicle still finds it: the repair check
+            r = fixed[0]
+            report_id = r["id"]
+            since_last = seconds_since(r["recheck_last"])
+            new_pass = since_last is None or since_last >= app.config["REPASS_SECONDS"]
+            passes = (r["recheck_count"] or 0) + (1 if new_pass else 0)
+            still_name = f"{r['code']}_still_there_{passes}.jpg"
+            ann_path.replace(upload_dir / still_name)
+            img_path.unlink(missing_ok=True)
+            if passes >= need:
+                con.execute("UPDATE reports SET status = 'OPEN', resolved_at = NULL, recheck_count = 0, "
+                            "recheck_last = NULL, updated_at = ? WHERE id = ?", (now, report_id))
+                add_event(con, report_id, "OPEN", f"Reopened automatically: {passes} separate passes still found the "
+                                                  "pothole after it was marked fixed", actor)
+                status_word = "reopened"
+            else:
+                con.execute("UPDATE reports SET recheck_count = ?, recheck_last = ? WHERE id = ?",
+                            (passes, now if new_pass else r["recheck_last"], report_id))
+                if new_pass:
+                    add_event(con, report_id, "RESOLVED", f"Still found by {actor} after the repair ({how}); "
+                                                          f"pass {passes} of {need} needed to reopen", actor)
+                status_word = "recheck"
+        else:
+            auth = route_authority(con, lat, lng)
+            address = geocoder.reverse(lat, lng) or f"{lat:.5f}, {lng:.5f}"
+            cur = con.execute(
+                "INSERT INTO reports (code, lat, lng, accuracy_m, location_source, address, image_path, annotated_path,"
+                " primary_class, confidence, severity_score, severity, detections_json, status, authority_id,"
+                " created_at, updated_at, source, device_id, jolt_g, speed_kmh)"
+                " VALUES (?,?,?,?,'device',?,?,?,?,?,?,?,?,'OPEN',?,?,?,'device',?,?,?)",
+                (code, lat, lng, to_float(f.get("accuracy")), address, img_name, ann_name, top_cls, top_conf, score,
+                 label, json.dumps(dets), auth["id"] if auth else None, now, now, device_id, jolt_g, speed))
+            report_id, status_word = cur.lastrowid, "created"
+            add_event(con, report_id, "OPEN", f"Found by {actor}: {how}", actor)
+        con.commit()
+
+        row = con.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+        rep = report_public(row)
+        if status_word == "created" or (status_word == "merged" and (escalated or row["report_count"] in (3, 5, 10))):
+            subj, text, sms = msg_new_report(rep, base_url, repeat=status_word == "merged")
+            notifier.send(report_id, "authority", authority_recipients(con, row["authority_id"]), subj, text, sms,
+                          attachment=upload_dir / row["annotated_path"])
+        elif status_word == "reopened":
+            subj, text, sms = msg_reopened(rep, base_url, passes)
+            notifier.send(report_id, "authority", authority_recipients(con, row["authority_id"]), subj, text, sms,
+                          attachment=upload_dir / still_name)
+            subj, text, sms = msg_citizen_reopened(rep, base_url)
+            notifier.send(report_id, "citizen", citizen_recipients(con, report_id), subj, text, sms)
+
+        return jsonify({"ok": True, "status": status_word, "code": row["code"], "kind": kind,
+                        "severity": label, "severity_score": score, "jolt_score": js,
+                        "report_status": row["status"], "report_severity": row["severity"],
+                        "report_count": row["report_count"], "passes": passes,
+                        "passes_needed": need if passes is not None else None})
 
     # ------------------------------------------------------------------ admin auth
     @app.route("/admin/login", methods=["GET", "POST"])

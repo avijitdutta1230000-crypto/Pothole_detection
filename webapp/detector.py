@@ -112,3 +112,19 @@ class RoadDamageDetector:
             d.rectangle([x0, ty, x0 + tw + 2 * lw, ty + th + 2 * lw], fill=colour)
             d.text((x0 + lw, ty + lw - tb[1]), text, fill=(255, 255, 255), font=font)
         return out
+
+
+def caption_bar(im, text):
+    """A dark strip with one line of text under the photo (used for what the pothole box felt)."""
+    try:
+        font = ImageFont.load_default(size=max(14, round(im.width / 55)))
+    except TypeError:  # Pillow < 10.1
+        font = ImageFont.load_default()
+    probe = ImageDraw.Draw(im)
+    tb = probe.textbbox((0, 0), text, font=font)
+    pad = max(6, round(im.width / 160))
+    bar_h = tb[3] - tb[1] + 2 * pad
+    out = Image.new("RGB", (im.width, im.height + bar_h), (24, 24, 24))
+    out.paste(im, (0, 0))
+    ImageDraw.Draw(out).text((pad, im.height + pad - tb[1]), text, fill=(255, 255, 255), font=font)
+    return out

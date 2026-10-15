@@ -41,6 +41,14 @@ class Config:
     ALERT_RADIUS_M = _float("ALERT_RADIUS_M", 1000)
     DUPLICATE_RADIUS_M = _float("DUPLICATE_RADIUS_M", 15)
 
+    # Raspberry Pi pothole box. Every box sends this token with its reports; leave it empty to switch the
+    # device API off. After a pothole is marked fixed, REOPEN_AFTER_PASSES separate passes (at least
+    # REPASS_SECONDS apart) that still find it within REPAIR_CHECK_DAYS reopen the complaint.
+    DEVICE_TOKEN = os.getenv("DEVICE_TOKEN", "")
+    REOPEN_AFTER_PASSES = int(_float("REOPEN_AFTER_PASSES", 2))
+    REPASS_SECONDS = _float("REPASS_SECONDS", 60)
+    REPAIR_CHECK_DAYS = _float("REPAIR_CHECK_DAYS", 30)
+
     # First admin login (created on first run)
     ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")

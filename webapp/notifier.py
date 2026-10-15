@@ -191,3 +191,27 @@ def msg_citizen_status(r, status, note, authority_name, base_url):
         body += f"\n\nNote from the road team: {note}"
     body += f"\n\nSee the photos and history: {url}"
     return subject, body, sms
+
+
+def msg_reopened(r, base_url, passes):
+    """Passing pothole boxes still find a pothole that was marked fixed."""
+    url = f"{base_url}/admin?report={r['code']}"
+    subject = f"[PotholeWatch] Reopened: pothole still there at {r['address']}"
+    email = (
+        f"Report {r['code']} was marked fixed, but {passes} separate passes by pothole boxes still found a pothole "
+        f"at this spot, so the complaint has been reopened.\n\n"
+        f"Location: {r['address']}\nMap: {maps_link(r['lat'], r['lng'])}\n\n"
+        f"Please check the repair:\n{url}\n\nThe latest photo from the passing vehicle is attached."
+    )
+    sms = (f"PotholeWatch: {r['code']} at {r['address'][:50]} was marked fixed but vehicles still find it. "
+           f"Reopened. {maps_link(r['lat'], r['lng'])}")
+    return subject, email, sms
+
+
+def msg_citizen_reopened(r, base_url):
+    url = f"{base_url}/track/{r['code']}"
+    subject = f"Update: the pothole you reported ({r['code']}) is still there"
+    body = (f"The {r['primary_label'].lower()} at {r['address']} was marked fixed, but vehicles passing that spot "
+            f"still find it. We have reopened the complaint and told the road team again.\n\nTrack it here: {url}")
+    sms = f"PotholeWatch: {r['code']} is still there after the repair, so it has been reopened. {url}"
+    return subject, body, sms
